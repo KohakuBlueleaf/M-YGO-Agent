@@ -20,9 +20,9 @@ We introduce following updates and features:
 Clone this repository and follow the "build from source" instructions in the original YGO-agent repository.
 
 ## TODOs
-- [] A more comprehensive document on "how to use the ygoenv"
-- [] Examples of ygoenv usage for making RL agent
-- [] RL Agent implementation in pytorch
+- [ ] A more comprehensive document on "how to use the ygoenv"
+- [ ] Examples of ygoenv usage for making RL agent
+- [ ] RL Agent implementation in pytorch
 
 ## Known Issues
 * EDOPro backend is not working properly, it is recommended to use YGOPro-v1 backend
