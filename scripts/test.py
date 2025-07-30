@@ -48,7 +48,7 @@ class Args:
     """whether to record the game as YGOPro replays"""
 
     num_episodes: int = 1024
-    """the number of episodes to run""" 
+    """the number of episodes to run"""
     num_envs: int = 64
     """the number of parallel game environments"""
 
@@ -72,7 +72,9 @@ if __name__ == "__main__":
 
     args.env_threads = min(args.env_threads or args.num_envs, args.num_envs)
 
-    deck, deck_names = init_ygopro(args.env_id, args.lang, args.deck, args.code_list_file, return_deck_names=True)
+    deck, deck_names = init_ygopro(
+        args.env_id, args.lang, args.deck, args.code_list_file, return_deck_names=True
+    )
 
     args.deck1 = args.deck1 or deck
     args.deck2 = args.deck2 or deck
@@ -95,7 +97,9 @@ if __name__ == "__main__":
         player=args.player,
         max_options=args.max_options,
         n_history_actions=args.n_history_actions,
-        play_mode='human' if args.play else ('bot' if args.bot_type == "greedy" else "random"),
+        play_mode=(
+            "human" if args.play else ("bot" if args.bot_type == "greedy" else "random")
+        ),
         async_reset=False,
         verbose=args.verbose,
         record=args.record,
@@ -105,8 +109,10 @@ if __name__ == "__main__":
     envs = RecordEpisodeStatistics(envs)
 
     obs, infos = envs.reset()
-    next_to_play = infos['to_play']
+    next_to_play = infos["to_play"]
     dones = np.zeros(num_envs, dtype=np.bool_)
+    for key, value in obs.items():
+        print(key, value.shape, value.dtype)
 
     episode_rewards = []
     episode_lengths = []
@@ -129,7 +135,7 @@ if __name__ == "__main__":
             model_time = env_time = 0
 
         if args.strategy == "random":
-            actions = np.random.randint(infos['num_options'])
+            actions = np.random.randint(infos["num_options"])
         else:
             actions = np.zeros(num_envs, dtype=np.int32)
 
@@ -137,8 +143,9 @@ if __name__ == "__main__":
 
         _start = time.time()
         obs, rewards, dones, infos = envs.step(actions)
-        next_to_play = infos['to_play']
+        next_to_play = infos["to_play"]
         env_time += time.time() - _start
+        print(rewards, step)
 
         step += 1
 
@@ -146,20 +153,24 @@ if __name__ == "__main__":
             if not d:
                 continue
 
-            win_reason = infos['win_reason'][idx]
-            episode_length = infos['l'][idx]
-            episode_reward = infos['r'][idx]
+            win_reason = infos["win_reason"][idx]
+            episode_length = infos["l"][idx]
+            episode_reward = infos["r"][idx]
             win = int(episode_reward > 0)
 
             episode_lengths.append(episode_length)
             episode_rewards.append(episode_reward)
             win_rates.append(win)
             win_reasons.append(1 if win_reason == 1 else 0)
-            sys.stderr.write(f"Episode {len(episode_lengths)}: length={episode_length}, reward={episode_reward}, win={win}, win_reason={win_reason}\n")
+            sys.stderr.write(
+                f"Episode {len(episode_lengths)}: length={episode_length}, reward={episode_reward}, win={win}, win_reason={win_reason}\n"
+            )
         if len(episode_lengths) >= args.num_episodes:
             break
 
-    print(f"len={np.mean(episode_lengths):.4f}, reward={np.mean(episode_rewards):.4f}, win_rate={np.mean(win_rates):.4f}, win_reason={np.mean(win_reasons):.4f}")
+    print(
+        f"len={np.mean(episode_lengths):.4f}, reward={np.mean(episode_rewards):.4f}, win_rate={np.mean(win_rates):.4f}, win_reason={np.mean(win_reasons):.4f}"
+    )
     if not args.play:
         total_time = time.time() - start
         total_steps = (step - start_step) * num_envs

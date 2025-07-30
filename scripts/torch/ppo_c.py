@@ -148,7 +148,7 @@ class Args:
     """the number of processes (computed in runtime)"""
 
 
-def make_env(args, num_envs, num_threads, mode='self'):
+def make_env(args, num_envs, num_threads, mode="self"):
     envs = ygoenv.make(
         task_id=args.env_id,
         env_type="gymnasium",
@@ -159,7 +159,7 @@ def make_env(args, num_envs, num_threads, mode='self'):
         deck2=args.deck2,
         max_options=args.max_options,
         n_history_actions=args.n_history_actions,
-        play_mode='self',
+        play_mode="self",
     )
     envs.num_envs = num_envs
     envs = RecordEpisodeStatistics(envs)
@@ -176,17 +176,21 @@ def actor(
 ):
     if a_rank == 0:
         from torch.utils.tensorboard import SummaryWriter
+
         writer = SummaryWriter(os.path.join(args.tb_dir, run_name))
         writer.add_text(
             "hyperparameters",
-            "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+            "|param|value|\n|-|-|\n%s"
+            % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
         )
     else:
         writer = None
     torch.set_num_threads(args.local_torch_threads)
-    torch.set_float32_matmul_precision('high')
+    torch.set_float32_matmul_precision("high")
 
-    device = torch.device(f"cuda:{device_thread_id}" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device(
+        f"cuda:{device_thread_id}" if torch.cuda.is_available() and args.cuda else "cpu"
+    )
 
     deck = init_ygopro(args.env_id, "english", args.deck, args.code_list_file)
     args.deck1 = args.deck1 or deck
@@ -203,8 +207,8 @@ def actor(
     local_eval_episodes = args.eval_episodes // args.world_size
     local_eval_num_envs = local_eval_episodes
     local_eval_num_threads = max(1, local_eval_num_envs // envs_per_thread)
-    eval_envs = make_env(args, local_eval_num_envs, local_eval_num_threads, mode='bot')
-    
+    eval_envs = make_env(args, local_eval_num_envs, local_eval_num_threads, mode="bot")
+
     if args.embedding_file:
         embeddings = load_embeddings(args.embedding_file, args.code_list_file)
         embedding_shape = embeddings.shape
@@ -227,12 +231,18 @@ def actor(
         agent_r = agent
 
     obs = create_obs(obs_space, (args.num_steps, args.local_num_envs), device)
-    actions = torch.zeros((args.num_steps, args.local_num_envs) + action_shape).to(device)
+    actions = torch.zeros((args.num_steps, args.local_num_envs) + action_shape).to(
+        device
+    )
     logprobs = torch.zeros((args.num_steps, args.local_num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.local_num_envs)).to(device)
-    dones = torch.zeros((args.num_steps, args.local_num_envs), dtype=torch.bool).to(device)
+    dones = torch.zeros((args.num_steps, args.local_num_envs), dtype=torch.bool).to(
+        device
+    )
     values = torch.zeros((args.num_steps, args.local_num_envs)).to(device)
-    learns = torch.zeros((args.num_steps, args.local_num_envs), dtype=torch.bool).to(device)
+    learns = torch.zeros((args.num_steps, args.local_num_envs), dtype=torch.bool).to(
+        device
+    )
     avg_ep_returns = deque(maxlen=1000)
     avg_win_rates = deque(maxlen=1000)
 
@@ -244,10 +254,12 @@ def actor(
     next_to_play_ = info["to_play"]
     next_to_play = to_tensor(next_to_play_, device)
     next_done = torch.zeros(args.local_num_envs, device=device, dtype=torch.bool)
-    ai_player1_ = np.concatenate([
-        np.zeros(args.local_num_envs // 2, dtype=np.int64),
-        np.ones(args.local_num_envs // 2, dtype=np.int64)
-    ])
+    ai_player1_ = np.concatenate(
+        [
+            np.zeros(args.local_num_envs // 2, dtype=np.int64),
+            np.ones(args.local_num_envs // 2, dtype=np.int64),
+        ]
+    )
     np.random.shuffle(ai_player1_)
     ai_player1 = to_tensor(ai_player1_, device, dtype=next_to_play.dtype)
     next_value1 = next_value2 = 0
@@ -293,7 +305,9 @@ def actor(
             next_to_play = to_tensor(next_to_play_, device)
             env_time += time.time() - _start
             rewards[step] = to_tensor(reward, device)
-            next_obs, next_done = to_tensor(next_obs, device, torch.uint8), to_tensor(next_done_, device, torch.bool)
+            next_obs, next_done = to_tensor(next_obs, device, torch.uint8), to_tensor(
+                next_done_, device, torch.bool
+            )
             step += 1
 
             global_step += args.num_envs
@@ -304,25 +318,41 @@ def actor(
             for idx, d in enumerate(next_done_):
                 if d:
                     pl = 1 if to_play[idx] == ai_player1_[idx] else -1
-                    episode_length = info['l'][idx]
-                    episode_reward = info['r'][idx] * pl
+                    episode_length = info["l"][idx]
+                    episode_reward = info["r"][idx] * pl
                     win = 1 if episode_reward > 0 else 0
                     avg_ep_returns.append(episode_reward)
                     avg_win_rates.append(win)
 
                     if random.random() < args.log_p:
                         n = 100
-                        if random.random() < 10/n or iteration <= 1:
-                            writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
-                            writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
-                            fprint(f"global_step={global_step}, e_ret={episode_reward}, e_len={episode_length}")
+                        if random.random() < 10 / n or iteration <= 1:
+                            writer.add_scalar(
+                                "charts/episodic_return", info["r"][idx], global_step
+                            )
+                            writer.add_scalar(
+                                "charts/episodic_length", info["l"][idx], global_step
+                            )
+                            fprint(
+                                f"global_step={global_step}, e_ret={episode_reward}, e_len={episode_length}"
+                            )
 
-                        if random.random() < 1/n:
-                            writer.add_scalar("charts/avg_ep_return", np.mean(avg_ep_returns), global_step)
-                            writer.add_scalar("charts/avg_win_rate", np.mean(avg_win_rates), global_step)
+                        if random.random() < 1 / n:
+                            writer.add_scalar(
+                                "charts/avg_ep_return",
+                                np.mean(avg_ep_returns),
+                                global_step,
+                            )
+                            writer.add_scalar(
+                                "charts/avg_win_rate",
+                                np.mean(avg_win_rates),
+                                global_step,
+                            )
 
         collect_time = time.time() - collect_start
-        fprint(f"collect_time={collect_time:.4f}, model_time={model_time:.4f}, env_time={env_time:.4f}")
+        fprint(
+            f"collect_time={collect_time:.4f}, model_time={model_time:.4f}, env_time={env_time:.4f}"
+        )
 
         _start = time.time()
         # bootstrap value if not done
@@ -338,14 +368,15 @@ def actor(
             start = iq * n_e
             end = start + n_e
             data = []
-            d = optree.tree_map(lambda x: x[:, start:end],
-                (obs, actions, logprobs, rewards, dones, values, learns))
+            d = optree.tree_map(
+                lambda x: x[:, start:end],
+                (obs, actions, logprobs, rewards, dones, values, learns),
+            )
             for v in d:
                 data.append(v)
             for v in [next_done, nextvalues1, nextvalues2]:
                 data.append(v[start:end])
             rq.put(data)
-
 
         SPS = int((global_step - warmup_steps) / (time.time() - start_time))
 
@@ -362,7 +393,8 @@ def actor(
             # Eval with rule-based policy
             _start = time.time()
             eval_return = evaluate(
-                eval_envs, agent_r, local_eval_episodes, device, args.fp16_eval)[0]
+                eval_envs, agent_r, local_eval_episodes, device, args.fp16_eval
+            )[0]
             eval_stats = torch.tensor(eval_return, dtype=torch.float32, device=device)
 
             # sync the statistics
@@ -382,16 +414,16 @@ def learner(
     param_queue: Queue,
     run_name,
     ckpt_dir,
-    device_thread_id,    
+    device_thread_id,
 ):
     num_learners = len(args.learner_device_ids)
     if len(args.learner_device_ids) > 1:
-        setup('nccl', l_rank, num_learners, args.port)
+        setup("nccl", l_rank, num_learners, args.port)
     local_batch_size = args.local_batch_size // num_learners
     local_minibatch_size = args.local_minibatch_size // num_learners
 
     torch.set_num_threads(args.local_torch_threads)
-    torch.set_float32_matmul_precision('high')
+    torch.set_float32_matmul_precision("high")
 
     args.seed += l_rank
     random.seed(args.seed)
@@ -403,7 +435,9 @@ def learner(
     else:
         torch.backends.cudnn.benchmark = True
 
-    device = torch.device(f"cuda:{device_thread_id}" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device(
+        f"cuda:{device_thread_id}" if torch.cuda.is_available() and args.cuda else "cpu"
+    )
     if args.embedding_file:
         embeddings = load_embeddings(args.embedding_file, args.code_list_file)
         embedding_shape = embeddings.shape
@@ -413,17 +447,21 @@ def learner(
     agent = Agent(args.num_channels, L, L, embedding_shape).to(device)
 
     from ygoai.rl.ppo import train_step
+
     if args.compile:
         train_step = torch.compile(train_step, mode=args.compile)
 
     optim_params = list(agent.parameters())
     optimizer = optim.Adam(optim_params, lr=args.learning_rate, eps=1e-5)
 
-    scaler = GradScaler(enabled=args.fp16_train, init_scale=2 ** 8)
+    scaler = GradScaler(enabled=args.fp16_train, init_scale=2**8)
 
     global_step = 0
 
-    first_in_group = l_rank % (num_learners // (len(args.actor_device_ids) * args.num_actor_threads)) == 0
+    first_in_group = (
+        l_rank % (num_learners // (len(args.actor_device_ids) * args.num_actor_threads))
+        == 0
+    )
 
     if first_in_group:
         param_queue.put(("Init", agent.state_dict()))
@@ -433,27 +471,45 @@ def learner(
         _start = time.time()
         data = rollout_queue.get()
         wait_time = time.time() - _start
-        obs, actions, logprobs, rewards, dones, values, learns, next_done, nextvalues1, nextvalues2 \
-            = optree.tree_map(lambda x: x.to(device=device, non_blocking=True), data)
+        (
+            obs,
+            actions,
+            logprobs,
+            rewards,
+            dones,
+            values,
+            learns,
+            next_done,
+            nextvalues1,
+            nextvalues2,
+        ) = optree.tree_map(lambda x: x.to(device=device, non_blocking=True), data)
         advantages = bootstrap_value_selfplay(
-            values, rewards, dones, learns, nextvalues1, nextvalues2, next_done, args.gamma, args.gae_lambda)
+            values,
+            rewards,
+            dones,
+            learns,
+            nextvalues1,
+            nextvalues2,
+            next_done,
+            args.gamma,
+            args.gae_lambda,
+        )
         bootstrap_time = time.time() - bootstrap_start
 
         _start = time.time()
         # flatten the batch
         b_obs = {
-            k: v[:args.num_steps].reshape((-1,) + v.shape[2:])
-            for k, v in obs.items()
+            k: v[: args.num_steps].reshape((-1,) + v.shape[2:]) for k, v in obs.items()
         }
-        b_actions = actions[:args.num_steps].flatten(0, 1)
-        b_logprobs = logprobs[:args.num_steps].reshape(-1)
-        b_advantages = advantages[:args.num_steps].reshape(-1)
-        b_values = values[:args.num_steps].reshape(-1)
+        b_actions = actions[: args.num_steps].flatten(0, 1)
+        b_logprobs = logprobs[: args.num_steps].reshape(-1)
+        b_advantages = advantages[: args.num_steps].reshape(-1)
+        b_values = values[: args.num_steps].reshape(-1)
         b_returns = b_advantages + b_values
         if args.learn_opponent:
             b_learns = torch.ones_like(b_values, dtype=torch.bool)
         else:
-            b_learns = learns[:args.num_steps].reshape(-1)
+            b_learns = learns[: args.num_steps].reshape(-1)
 
         # Optimizing the policy and value network
         b_inds = np.arange(local_batch_size)
@@ -463,12 +519,22 @@ def learner(
             for start in range(0, local_batch_size, local_minibatch_size):
                 end = start + local_minibatch_size
                 mb_inds = b_inds[start:end]
-                mb_obs = {
-                    k: v[mb_inds] for k, v in b_obs.items()
-                }
-                old_approx_kl, approx_kl, clipfrac, pg_loss, v_loss, entropy_loss = \
-                    train_step(agent, optimizer, scaler, mb_obs, b_actions[mb_inds], b_logprobs[mb_inds], b_advantages[mb_inds],
-                            b_returns[mb_inds], b_values[mb_inds], b_learns[mb_inds], args)
+                mb_obs = {k: v[mb_inds] for k, v in b_obs.items()}
+                old_approx_kl, approx_kl, clipfrac, pg_loss, v_loss, entropy_loss = (
+                    train_step(
+                        agent,
+                        optimizer,
+                        scaler,
+                        mb_obs,
+                        b_actions[mb_inds],
+                        b_logprobs[mb_inds],
+                        b_advantages[mb_inds],
+                        b_returns[mb_inds],
+                        b_values[mb_inds],
+                        b_learns[mb_inds],
+                        args,
+                    )
+                )
                 reduce_gradidents(optim_params, num_learners)
                 nn.utils.clip_grad_norm_(optim_params, args.max_grad_norm)
                 scaler.step(optimizer)
@@ -482,16 +548,22 @@ def learner(
 
         if l_rank == 0:
             train_time = time.time() - _start
-            fprint(f"train_time={train_time:.4f}, bootstrap_time={bootstrap_time:.4f}, wait_time={wait_time:.4f}")
+            fprint(
+                f"train_time={train_time:.4f}, bootstrap_time={bootstrap_time:.4f}, wait_time={wait_time:.4f}"
+            )
 
             if iteration % args.save_interval == 0:
                 torch.save(agent.state_dict(), os.path.join(ckpt_dir, f"agent.pt"))
 
             y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
             var_y = np.var(y_true)
-            explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+            explained_var = (
+                np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+            )
 
-            fprint(f"global_step={global_step}, value_loss={v_loss.item():.4f}, policy_loss={pg_loss.item():.4f}, entropy_loss={entropy_loss.item():.4f}")
+            fprint(
+                f"global_step={global_step}, value_loss={v_loss.item():.4f}, policy_loss={pg_loss.item():.4f}, entropy_loss={entropy_loss.item():.4f}"
+            )
 
             # writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
             # writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
@@ -507,22 +579,39 @@ if __name__ == "__main__":
     world_size = int(os.environ.get("WORLD_SIZE", 1))
 
     args = tyro.cli(Args)
-    args.local_batch_size = int(args.local_num_envs * args.num_steps * args.num_actor_threads * len(args.actor_device_ids))
+    args.local_batch_size = int(
+        args.local_num_envs
+        * args.num_steps
+        * args.num_actor_threads
+        * len(args.actor_device_ids)
+    )
     args.local_minibatch_size = int(args.local_batch_size // args.num_minibatches)
     assert (
         args.local_num_envs % len(args.learner_device_ids) == 0
     ), "local_num_envs must be divisible by len(learner_device_ids)"
     assert (
-        int(args.local_num_envs / len(args.learner_device_ids)) * args.num_actor_threads % args.num_minibatches == 0
+        int(args.local_num_envs / len(args.learner_device_ids))
+        * args.num_actor_threads
+        % args.num_minibatches
+        == 0
     ), "int(local_num_envs / len(learner_device_ids)) must be divisible by num_minibatches"
 
     args.world_size = 1
-    args.num_envs = args.local_num_envs * args.world_size * args.num_actor_threads * len(args.actor_device_ids)
+    args.num_envs = (
+        args.local_num_envs
+        * args.world_size
+        * args.num_actor_threads
+        * len(args.actor_device_ids)
+    )
     args.batch_size = args.local_batch_size * args.world_size
     args.minibatch_size = args.local_minibatch_size * args.world_size
     args.num_iterations = args.total_timesteps // args.batch_size
-    args.env_threads = args.local_env_threads * args.num_actor_threads * len(args.actor_device_ids)
-    args.local_torch_threads = args.local_torch_threads or int(os.getenv("OMP_NUM_THREADS", "2"))
+    args.env_threads = (
+        args.local_env_threads * args.num_actor_threads * len(args.actor_device_ids)
+    )
+    args.local_torch_threads = args.local_torch_threads or int(
+        os.getenv("OMP_NUM_THREADS", "2")
+    )
 
     timestamp = int(time.time())
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{timestamp}"
@@ -538,7 +627,9 @@ if __name__ == "__main__":
 
     num_actors = len(args.actor_device_ids) * args.num_actor_threads
     num_learners = len(args.learner_device_ids)
-    assert num_learners % num_actors == 0, "num_learners must be divisible by num_actors"
+    assert (
+        num_learners % num_actors == 0
+    ), "num_learners must be divisible by num_actors"
     group_size = num_learners // num_actors
 
     for i, device_id in enumerate(args.actor_device_ids):
@@ -549,7 +640,14 @@ if __name__ == "__main__":
             rollout_queues.extend(rollout_queues_)
             p = mp.Process(
                 target=actor,
-                args=(args, a_rank, rollout_queues_, param_queues[-1], run_name, device_id),
+                args=(
+                    args,
+                    a_rank,
+                    rollout_queues_,
+                    param_queues[-1],
+                    run_name,
+                    device_id,
+                ),
             )
             actor_processes.append(p)
             p.start()

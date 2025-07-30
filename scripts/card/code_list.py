@@ -6,6 +6,7 @@ import tyro
 
 from ygoai.embed import read_cards
 
+
 @dataclass
 class Args:
     output: str = "code_list.txt"
@@ -14,6 +15,7 @@ class Args:
     """the cards database file"""
     script_dir: str = "script"
     """path to the scripts directory"""
+
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
@@ -26,7 +28,7 @@ if __name__ == "__main__":
     codes = sorted([os.path.basename(f).split(".")[0][1:] for f in script_files])
     # exclude constant.lua
     codes_s = set([int(c) for c in codes[:-1]])
-    codes_c = sorted([ c.code for c in cards ])
+    codes_c = sorted([c.code for c in cards])
 
     difference = codes_s.difference(codes_c)
     if len(difference) > 0:

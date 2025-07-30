@@ -11,6 +11,7 @@ import numpy as np
 import tyro
 
 import torch
+
 torch.set_num_threads(2)
 import torch.optim as optim
 import torch.distributed as dist
@@ -142,7 +143,7 @@ class Args:
     num_embeddings: Optional[int] = None
 
 
-def make_env(args, num_envs, num_threads, mode='self'):
+def make_env(args, num_envs, num_threads, mode="self"):
     envs = ygoenv.make(
         task_id=args.env_id,
         env_type="gymnasium",
@@ -159,6 +160,7 @@ def make_env(args, num_envs, num_threads, mode='self'):
     envs = RecordEpisodeStatistics(envs)
     return envs
 
+
 def _mp_fn(index, world_size):
     rank = index
     local_rank = index
@@ -173,32 +175,39 @@ def _mp_fn(index, world_size):
     args.num_iterations = args.total_timesteps // args.batch_size
     args.local_env_threads = args.local_env_threads or args.local_num_envs
     args.env_threads = args.local_env_threads * args.world_size
-    args.torch_threads = args.torch_threads or (int(os.getenv("OMP_NUM_THREADS", "2")) * args.world_size)
+    args.torch_threads = args.torch_threads or (
+        int(os.getenv("OMP_NUM_THREADS", "2")) * args.world_size
+    )
     args.collect_length = args.collect_length or args.num_steps
 
-    assert args.local_batch_size % args.local_minibatch_size == 0, "local_batch_size must be divisible by local_minibatch_size"
-    assert args.collect_length >= args.num_steps, "collect_length must be greater than or equal to num_steps"
+    assert (
+        args.local_batch_size % args.local_minibatch_size == 0
+    ), "local_batch_size must be divisible by local_minibatch_size"
+    assert (
+        args.collect_length >= args.num_steps
+    ), "collect_length must be greater than or equal to num_steps"
 
     torch.set_num_threads(2)
     # torch.set_float32_matmul_precision('high')
 
     if args.world_size > 1:
-        dist.init_process_group('xla', init_method='xla://')
+        dist.init_process_group("xla", init_method="xla://")
 
     timestamp = int(time.time())
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{timestamp}"
     writer = None
     if rank == 0:
         from torch.utils.tensorboard import SummaryWriter
+
         writer = SummaryWriter(os.path.join(args.tb_dir, run_name))
         writer.add_text(
             "hyperparameters",
-            "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+            "|param|value|\n|-|-|\n%s"
+            % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
         )
 
         ckpt_dir = os.path.join(args.ckpt_dir, run_name)
         os.makedirs(ckpt_dir, exist_ok=True)
-
 
     # TRY NOT TO MODIFY: seeding
     # CRUCIAL: note that we needed to pass a different seed for each data parallelism worker
@@ -228,7 +237,7 @@ def _mp_fn(index, world_size):
     local_eval_episodes = args.eval_episodes // args.world_size
     local_eval_num_envs = local_eval_episodes
     local_eval_num_threads = max(1, local_eval_num_envs // envs_per_thread)
-    eval_envs = make_env(args, local_eval_num_envs, local_eval_num_threads, mode='bot')
+    eval_envs = make_env(args, local_eval_num_envs, local_eval_num_threads, mode="bot")
 
     if args.embedding_file:
         embeddings = load_embeddings(args.embedding_file, args.code_list_file)
@@ -269,10 +278,11 @@ def _mp_fn(index, world_size):
         return logits, value
 
     from ygoai.rl.ppo import train_step_t as train_step
+
     if args.compile:
-        traced_model = torch.compile(agent, backend='openxla_eval')
+        traced_model = torch.compile(agent, backend="openxla_eval")
         traced_model_t = traced_model
-        train_step = torch.compile(train_step, backend='openxla')
+        train_step = torch.compile(train_step, backend="openxla")
     else:
         traced_model = agent
         traced_model_t = agent_t
@@ -281,10 +291,14 @@ def _mp_fn(index, world_size):
     obs_shape = get_obs_shape(obs_space)
     obs = {
         key: np.zeros(
-            (args.collect_length, args.local_num_envs, *_obs_shape), dtype=obs_space[key].dtype)
+            (args.collect_length, args.local_num_envs, *_obs_shape),
+            dtype=obs_space[key].dtype,
+        )
         for key, _obs_shape in obs_shape.items()
     }
-    actions = np.zeros((args.collect_length, args.local_num_envs) + action_shape, dtype=np.int64)
+    actions = np.zeros(
+        (args.collect_length, args.local_num_envs) + action_shape, dtype=np.int64
+    )
     logprobs = np.zeros((args.collect_length, args.local_num_envs), dtype=np.float32)
     rewards = np.zeros((args.collect_length, args.local_num_envs), dtype=np.float32)
     dones = np.zeros((args.collect_length, args.local_num_envs), dtype=np.bool_)
@@ -302,10 +316,12 @@ def _mp_fn(index, world_size):
     next_obs_ = to_tensor(next_obs, device, dtype=torch.uint8)
     next_to_play = info["to_play"]
     next_done = np.zeros(args.local_num_envs, dtype=np.bool_)
-    ai_player1 = np.concatenate([
-        np.zeros(args.local_num_envs // 2, dtype=np.int64),
-        np.ones(args.local_num_envs // 2, dtype=np.int64)
-    ])
+    ai_player1 = np.concatenate(
+        [
+            np.zeros(args.local_num_envs // 2, dtype=np.int64),
+            np.ones(args.local_num_envs // 2, dtype=np.int64),
+        ]
+    )
     np.random.shuffle(ai_player1)
     next_value1 = next_value2 = 0
     step = 0
@@ -351,7 +367,7 @@ def _mp_fn(index, world_size):
             value = value.cpu().numpy()
             action = action.cpu().numpy()
             o_time2 += time.time() - _start
-            
+
             _start = time.time()
             values[step] = value
             actions[step] = action
@@ -370,7 +386,7 @@ def _mp_fn(index, world_size):
             _start = time.time()
             rewards[step] = reward
             o_time1 += time.time() - _start
-            
+
             _start = time.time()
             next_obs_ = to_tensor(next_obs, device, torch.uint8)
             o_time2 += time.time() - _start
@@ -382,26 +398,42 @@ def _mp_fn(index, world_size):
             for idx, d in enumerate(next_done):
                 if d:
                     pl = 1 if to_play[idx] == ai_player1[idx] else -1
-                    episode_length = info['l'][idx]
-                    episode_reward = info['r'][idx] * pl
+                    episode_length = info["l"][idx]
+                    episode_reward = info["r"][idx] * pl
                     win = 1 if episode_reward > 0 else 0
                     avg_ep_returns.append(episode_reward)
                     avg_win_rates.append(win)
 
                     if random.random() < args.log_p:
                         n = 100
-                        if random.random() < 10/n or iteration <= 1:
-                            writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
-                            writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
-                            fprint(f"global_step={global_step}, e_ret={episode_reward}, e_len={episode_length}")
+                        if random.random() < 10 / n or iteration <= 1:
+                            writer.add_scalar(
+                                "charts/episodic_return", info["r"][idx], global_step
+                            )
+                            writer.add_scalar(
+                                "charts/episodic_length", info["l"][idx], global_step
+                            )
+                            fprint(
+                                f"global_step={global_step}, e_ret={episode_reward}, e_len={episode_length}"
+                            )
 
-                        if random.random() < 1/n:
-                            writer.add_scalar("charts/avg_ep_return", np.mean(avg_ep_returns), global_step)
-                            writer.add_scalar("charts/avg_win_rate", np.mean(avg_win_rates), global_step)
+                        if random.random() < 1 / n:
+                            writer.add_scalar(
+                                "charts/avg_ep_return",
+                                np.mean(avg_ep_returns),
+                                global_step,
+                            )
+                            writer.add_scalar(
+                                "charts/avg_win_rate",
+                                np.mean(avg_win_rates),
+                                global_step,
+                            )
 
         collect_time = time.time() - collect_start
         # if local_rank == 0:
-        fprint(f"[Rank {rank}] collect_time={collect_time:.4f}, model_time={model_time:.4f}, env_time={env_time:.4f}, o_time1={o_time1:.4f}, o_time2={o_time2:.4f}")
+        fprint(
+            f"[Rank {rank}] collect_time={collect_time:.4f}, model_time={model_time:.4f}, env_time={env_time:.4f}, o_time1={o_time1:.4f}, o_time2={o_time2:.4f}"
+        )
 
         step = args.collect_length - args.num_steps
 
@@ -421,16 +453,25 @@ def _mp_fn(index, world_size):
             v_steps = args.local_minibatch_size * 4 // args.local_num_envs
             for v_start in range(0, step, v_steps):
                 v_end = min(v_start + v_steps, step)
-                v_obs = {
-                    k: v[v_start:v_end].flatten(0, 1) for k, v in obs.items()
-                }
+                v_obs = {k: v[v_start:v_end].flatten(0, 1) for k, v in obs.items()}
                 with torch.no_grad():
                     # value = traced_get_value(v_obs).reshape(v_end - v_start, -1)
-                    value = predict_step(traced_model, v_obs)[1].reshape(v_end - v_start, -1)
+                    value = predict_step(traced_model, v_obs)[1].reshape(
+                        v_end - v_start, -1
+                    )
                 values[v_start:v_end] = value
 
         advantages = bootstrap_value_selfplay(
-            values, rewards, dones, learns, nextvalues1, nextvalues2, next_done, args.gamma, args.gae_lambda)
+            values,
+            rewards,
+            dones,
+            learns,
+            nextvalues1,
+            nextvalues2,
+            next_done,
+            args.gamma,
+            args.gae_lambda,
+        )
         bootstrap_time = time.time() - _start
 
         train_start = time.time()
@@ -439,28 +480,35 @@ def _mp_fn(index, world_size):
         d_time3 = 0
         # flatten the batch
         b_obs = {
-            k: v[:args.num_steps].reshape((-1,) + v.shape[2:])
-            for k, v in obs.items()
+            k: v[: args.num_steps].reshape((-1,) + v.shape[2:]) for k, v in obs.items()
         }
-        b_actions = actions[:args.num_steps].reshape((-1,) + action_shape)
-        b_logprobs = logprobs[:args.num_steps].reshape(-1)
-        b_advantages = advantages[:args.num_steps].reshape(-1)
-        b_values = values[:args.num_steps].reshape(-1)
+        b_actions = actions[: args.num_steps].reshape((-1,) + action_shape)
+        b_logprobs = logprobs[: args.num_steps].reshape(-1)
+        b_advantages = advantages[: args.num_steps].reshape(-1)
+        b_values = values[: args.num_steps].reshape(-1)
         b_returns = b_advantages + b_values
         if args.fix_target:
-            b_learns = learns[:args.num_steps].reshape(-1)
+            b_learns = learns[: args.num_steps].reshape(-1)
         else:
             b_learns = np.ones_like(b_values, dtype=np.bool_)
 
         _start = time.time()
         b_obs = to_tensor(b_obs, device=device, dtype=torch.uint8)
         b_actions, b_logprobs, b_advantages, b_values, b_returns, b_learns = [
-            to_tensor(v, device) for v in [b_actions, b_logprobs, b_advantages, b_values, b_returns, b_learns]
+            to_tensor(v, device)
+            for v in [
+                b_actions,
+                b_logprobs,
+                b_advantages,
+                b_values,
+                b_returns,
+                b_learns,
+            ]
         ]
         d_time1 += time.time() - _start
 
         agent.train()
-        
+
         model_time = 0
 
         # Optimizing the policy and value network
@@ -485,9 +533,21 @@ def _mp_fn(index, world_size):
                 d_time3 += time.time() - _start
 
                 _start = time.time()
-                old_approx_kl, approx_kl, clipfrac, pg_loss, v_loss, entropy_loss = \
-                    train_step(agent, optimizer, b_obs, b_actions, b_logprobs, b_advantages,
-                               b_returns, b_values, b_learns, mb_inds, args)
+                old_approx_kl, approx_kl, clipfrac, pg_loss, v_loss, entropy_loss = (
+                    train_step(
+                        agent,
+                        optimizer,
+                        b_obs,
+                        b_actions,
+                        b_logprobs,
+                        b_advantages,
+                        b_returns,
+                        b_values,
+                        b_learns,
+                        mb_inds,
+                        args,
+                    )
+                )
                 clipfracs.append(clipfrac)
                 xm.mark_step()
                 model_time += time.time() - _start
@@ -501,7 +561,7 @@ def _mp_fn(index, world_size):
                 # old_approx_kl, approx_kl, clipfrac, pg_loss, v_loss, entropy_loss = \
                 #     train_step(ddp_agent_t, optimizer, mb_obs, mb_actions, mb_logprobs, mb_advantages,
                 #                mb_returns, mb_values, mb_learns, args)
-                
+
                 # if rank == 0:
                 #     # For short report that only contains a few key metrics.
                 #     print(met.short_metrics_report())
@@ -510,19 +570,23 @@ def _mp_fn(index, world_size):
                 #     met.clear_all()
 
         clipfrac = torch.stack(clipfracs).mean().item()
-        
+
         if step > 0:
             # TODO: use cyclic buffer to avoid copying
             for v in obs.values():
-                v[:step] = v[args.num_steps:].clone()
+                v[:step] = v[args.num_steps :].clone()
             for v in [actions, logprobs, rewards, dones, values, learns]:
-                v[:step] = v[args.num_steps:].clone()
+                v[:step] = v[args.num_steps :].clone()
 
         train_time = time.time() - train_start
 
         if local_rank == 0:
-            fprint(f"d_time1={d_time1:.4f}, d_time2={d_time2:.4f}, d_time3={d_time3:.4f}")
-            fprint(f"train_time={train_time:.4f}, model_time={model_time:.4f}, collect_time={collect_time:.4f}, bootstrap_time={bootstrap_time:.4f}")
+            fprint(
+                f"d_time1={d_time1:.4f}, d_time2={d_time2:.4f}, d_time3={d_time3:.4f}"
+            )
+            fprint(
+                f"train_time={train_time:.4f}, model_time={model_time:.4f}, collect_time={collect_time:.4f}, bootstrap_time={bootstrap_time:.4f}"
+            )
 
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
@@ -532,7 +596,9 @@ def _mp_fn(index, world_size):
             if iteration % args.save_interval == 0:
                 torch.save(agent.state_dict(), os.path.join(ckpt_dir, f"agent.pt"))
 
-            writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+            writer.add_scalar(
+                "charts/learning_rate", optimizer.param_groups[0]["lr"], global_step
+            )
             writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
             writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
             writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
@@ -556,8 +622,14 @@ def _mp_fn(index, world_size):
 
         if args.fix_target:
             if rank == 0:
-                should_update = len(avg_win_rates) == 1000 and np.mean(avg_win_rates) > args.update_win_rate and np.mean(avg_ep_returns) > args.update_return
-                should_update = torch.tensor(int(should_update), dtype=torch.int64, device=device)
+                should_update = (
+                    len(avg_win_rates) == 1000
+                    and np.mean(avg_win_rates) > args.update_win_rate
+                    and np.mean(avg_ep_returns) > args.update_return
+                )
+                should_update = torch.tensor(
+                    int(should_update), dtype=torch.int64, device=device
+                )
             else:
                 should_update = torch.zeros((), dtype=torch.int64, device=device)
             if args.world_size > 1:
@@ -566,13 +638,23 @@ def _mp_fn(index, world_size):
             if should_update:
                 agent_t.load_state_dict(agent.state_dict())
                 with torch.no_grad():
-                    traced_model_t = torch.jit.trace(agent_t, (example_obs,), check_tolerance=False, check_trace=False)
+                    traced_model_t = torch.jit.trace(
+                        agent_t,
+                        (example_obs,),
+                        check_tolerance=False,
+                        check_trace=False,
+                    )
                     traced_model_t = torch.jit.optimize_for_inference(traced_model_t)
 
                 version += 1
                 if rank == 0:
-                    torch.save(agent.state_dict(), os.path.join(ckpt_dir, f"agent_v{version}.pt"))
-                    print(f"Updating agent at global_step={global_step} with win_rate={np.mean(avg_win_rates)}")
+                    torch.save(
+                        agent.state_dict(),
+                        os.path.join(ckpt_dir, f"agent_v{version}.pt"),
+                    )
+                    print(
+                        f"Updating agent at global_step={global_step} with win_rate={np.mean(avg_win_rates)}"
+                    )
                     avg_win_rates.clear()
                     avg_ep_returns.clear()
 
@@ -593,7 +675,7 @@ def _mp_fn(index, world_size):
         #         eval_time = time.time() - _start
         #         fprint(f"eval_time={eval_time:.4f}, eval_ep_return={eval_return:.4f}")
 
-            # Eval with old model
+        # Eval with old model
 
     if args.world_size > 1:
         dist.destroy_process_group()

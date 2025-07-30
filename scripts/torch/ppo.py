@@ -144,7 +144,7 @@ class Args:
     """the number of embeddings (computed in runtime)"""
 
 
-def make_env(args, num_envs, num_threads, mode='self'):
+def make_env(args, num_envs, num_threads, mode="self"):
     envs = ygoenv.make(
         task_id=args.env_id,
         env_type="gymnasium",
@@ -161,6 +161,7 @@ def make_env(args, num_envs, num_threads, mode='self'):
     envs = RecordEpisodeStatistics(envs)
     return envs
 
+
 def main():
     rank = int(os.environ.get("RANK", 0))
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -176,34 +177,39 @@ def main():
     args.num_iterations = args.total_timesteps // args.batch_size
     args.num_minibatches = args.local_batch_size // args.local_minibatch_size
     args.env_threads = args.env_threads or args.num_envs
-    args.torch_threads = args.torch_threads or (int(os.getenv("OMP_NUM_THREADS", "2")) * args.world_size)
+    args.torch_threads = args.torch_threads or (
+        int(os.getenv("OMP_NUM_THREADS", "2")) * args.world_size
+    )
     args.collect_length = args.collect_length or args.num_steps
 
-    assert args.collect_length >= args.num_steps, "collect_length must be greater than or equal to num_steps"
+    assert (
+        args.collect_length >= args.num_steps
+    ), "collect_length must be greater than or equal to num_steps"
 
     local_torch_threads = args.torch_threads // args.world_size
     local_env_threads = args.env_threads // args.world_size
 
     torch.set_num_threads(local_torch_threads)
-    torch.set_float32_matmul_precision('high')
+    torch.set_float32_matmul_precision("high")
 
     if args.world_size > 1:
-        torchrun_setup('nccl', local_rank)
+        torchrun_setup("nccl", local_rank)
 
     timestamp = int(time.time())
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{timestamp}"
     writer = None
     if rank == 0:
         from torch.utils.tensorboard import SummaryWriter
+
         writer = SummaryWriter(os.path.join(args.tb_dir, run_name))
         writer.add_text(
             "hyperparameters",
-            "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+            "|param|value|\n|-|-|\n%s"
+            % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
         )
 
         ckpt_dir = os.path.join(args.ckpt_dir, run_name)
         os.makedirs(ckpt_dir, exist_ok=True)
-
 
     # TRY NOT TO MODIFY: seeding
     # CRUCIAL: note that we needed to pass a different seed for each data parallelism worker
@@ -216,7 +222,9 @@ def main():
     else:
         torch.backends.cudnn.benchmark = True
 
-    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device(
+        f"cuda:{local_rank}" if torch.cuda.is_available() and args.cuda else "cpu"
+    )
 
     deck = init_ygopro(args.env_id, "english", args.deck, args.code_list_file)
     args.deck1 = args.deck1 or deck
@@ -233,7 +241,7 @@ def main():
     local_eval_episodes = args.eval_episodes // args.world_size
     local_eval_num_envs = local_eval_episodes
     local_eval_num_threads = max(1, local_eval_num_envs // envs_per_thread)
-    eval_envs = make_env(args, local_eval_num_envs, local_eval_num_threads, mode='bot')
+    eval_envs = make_env(args, local_eval_num_envs, local_eval_num_threads, mode="bot")
 
     if args.embedding_file:
         embeddings = load_embeddings(args.embedding_file, args.code_list_file)
@@ -264,7 +272,7 @@ def main():
     optim_params = list(agent.parameters())
     optimizer = optim.Adam(optim_params, lr=args.learning_rate, eps=1e-5)
 
-    scaler = GradScaler(enabled=args.fp16_train, init_scale=2 ** 8)
+    scaler = GradScaler(enabled=args.fp16_train, init_scale=2**8)
 
     def predict_step(agent: Agent, next_obs):
         with torch.no_grad():
@@ -275,11 +283,17 @@ def main():
     if args.compile:
         # It seems that using torch.compile twice cause segfault at start, so we use torch.jit.trace here
         # predict_step = torch.compile(predict_step, mode=args.compile)
-        example_obs = create_obs(envs.observation_space, (args.local_num_envs,), device=device)
+        example_obs = create_obs(
+            envs.observation_space, (args.local_num_envs,), device=device
+        )
         with torch.no_grad():
-            traced_model = torch.jit.trace(agent, (example_obs,), check_tolerance=False, check_trace=False)
+            traced_model = torch.jit.trace(
+                agent, (example_obs,), check_tolerance=False, check_trace=False
+            )
             if args.fix_target:
-                traced_model_t = torch.jit.trace(agent_t, (example_obs,), check_tolerance=False, check_trace=False)
+                traced_model_t = torch.jit.trace(
+                    agent_t, (example_obs,), check_tolerance=False, check_trace=False
+                )
                 traced_model_t = torch.jit.optimize_for_inference(traced_model_t)
             else:
                 traced_model_t = traced_model
@@ -292,12 +306,18 @@ def main():
 
     # ALGO Logic: Storage setup
     obs = create_obs(obs_space, (args.collect_length, args.local_num_envs), device)
-    actions = torch.zeros((args.collect_length, args.local_num_envs) + action_shape).to(device)
+    actions = torch.zeros((args.collect_length, args.local_num_envs) + action_shape).to(
+        device
+    )
     logprobs = torch.zeros((args.collect_length, args.local_num_envs)).to(device)
     rewards = torch.zeros((args.collect_length, args.local_num_envs)).to(device)
-    dones = torch.zeros((args.collect_length, args.local_num_envs), dtype=torch.bool).to(device)
+    dones = torch.zeros(
+        (args.collect_length, args.local_num_envs), dtype=torch.bool
+    ).to(device)
     values = torch.zeros((args.collect_length, args.local_num_envs)).to(device)
-    learns = torch.zeros((args.collect_length, args.local_num_envs), dtype=torch.bool).to(device)
+    learns = torch.zeros(
+        (args.collect_length, args.local_num_envs), dtype=torch.bool
+    ).to(device)
     avg_ep_returns = deque(maxlen=1000)
     avg_win_rates = deque(maxlen=1000)
     version = 0
@@ -311,10 +331,12 @@ def main():
     next_to_play_ = info["to_play"]
     next_to_play = to_tensor(next_to_play_, device)
     next_done = torch.zeros(args.local_num_envs, device=device, dtype=torch.bool)
-    main_player_ = np.concatenate([
-        np.zeros(args.local_num_envs // 2, dtype=np.int64),
-        np.ones(args.local_num_envs // 2, dtype=np.int64)
-    ])
+    main_player_ = np.concatenate(
+        [
+            np.zeros(args.local_num_envs // 2, dtype=np.int64),
+            np.ones(args.local_num_envs // 2, dtype=np.int64),
+        ]
+    )
     np.random.shuffle(main_player_)
     main_player = to_tensor(main_player_, device, dtype=next_to_play.dtype)
     step = 0
@@ -362,7 +384,9 @@ def main():
             next_to_play = to_tensor(next_to_play_, device)
             env_time += time.time() - _start
             rewards[step] = to_tensor(reward, device)
-            next_obs, next_done = to_tensor(next_obs, device, torch.uint8), to_tensor(next_done_, device, torch.bool)
+            next_obs, next_done = to_tensor(next_obs, device, torch.uint8), to_tensor(
+                next_done_, device, torch.bool
+            )
             step += 1
 
             if not writer:
@@ -371,26 +395,42 @@ def main():
             for idx, d in enumerate(next_done_):
                 if d:
                     pl = 1 if to_play[idx] == main_player_[idx] else -1
-                    episode_length = info['l'][idx]
-                    episode_reward = info['r'][idx] * pl
+                    episode_length = info["l"][idx]
+                    episode_reward = info["r"][idx] * pl
                     win = 1 if episode_reward > 0 else 0
                     avg_ep_returns.append(episode_reward)
                     avg_win_rates.append(win)
 
                     if random.random() < args.log_p:
                         n = 100
-                        if random.random() < 10/n or iteration <= 1:
-                            writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
-                            writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
-                            fprint(f"global_step={global_step}, e_ret={episode_reward}, e_len={episode_length}")
+                        if random.random() < 10 / n or iteration <= 1:
+                            writer.add_scalar(
+                                "charts/episodic_return", info["r"][idx], global_step
+                            )
+                            writer.add_scalar(
+                                "charts/episodic_length", info["l"][idx], global_step
+                            )
+                            fprint(
+                                f"global_step={global_step}, e_ret={episode_reward}, e_len={episode_length}"
+                            )
 
-                        if random.random() < 1/n:
-                            writer.add_scalar("charts/avg_ep_return", np.mean(avg_ep_returns), global_step)
-                            writer.add_scalar("charts/avg_win_rate", np.mean(avg_win_rates), global_step)
+                        if random.random() < 1 / n:
+                            writer.add_scalar(
+                                "charts/avg_ep_return",
+                                np.mean(avg_ep_returns),
+                                global_step,
+                            )
+                            writer.add_scalar(
+                                "charts/avg_win_rate",
+                                np.mean(avg_win_rates),
+                                global_step,
+                            )
 
         collect_time = time.time() - collect_start
         if local_rank == 0:
-            fprint(f"collect_time={collect_time:.4f}, model_time={model_time:.4f}, env_time={env_time:.4f}")
+            fprint(
+                f"collect_time={collect_time:.4f}, model_time={model_time:.4f}, env_time={env_time:.4f}"
+            )
 
         step = args.collect_length - args.num_steps
 
@@ -409,31 +449,39 @@ def main():
             v_steps = args.local_minibatch_size * 4 // args.local_num_envs
             for v_start in range(0, step, v_steps):
                 v_end = min(v_start + v_steps, step)
-                v_obs = {
-                    k: v[v_start:v_end].flatten(0, 1) for k, v in obs.items()
-                }
+                v_obs = {k: v[v_start:v_end].flatten(0, 1) for k, v in obs.items()}
                 with torch.no_grad():
                     # value = traced_get_value(v_obs).reshape(v_end - v_start, -1)
-                    value = predict_step(traced_model, v_obs)[1].reshape(v_end - v_start, -1)
+                    value = predict_step(traced_model, v_obs)[1].reshape(
+                        v_end - v_start, -1
+                    )
                 values[v_start:v_end] = value
 
         advantages = bootstrap_value_selfplay(
-            values, rewards, dones, learns, nextvalues1, nextvalues2, next_done, args.gamma, args.gae_lambda)
+            values,
+            rewards,
+            dones,
+            learns,
+            nextvalues1,
+            nextvalues2,
+            next_done,
+            args.gamma,
+            args.gae_lambda,
+        )
         bootstrap_time = time.time() - _start
 
         _start = time.time()
         # flatten the batch
         b_obs = {
-            k: v[:args.num_steps].reshape((-1,) + v.shape[2:])
-            for k, v in obs.items()
+            k: v[: args.num_steps].reshape((-1,) + v.shape[2:]) for k, v in obs.items()
         }
-        b_actions = actions[:args.num_steps].reshape((-1,) + action_shape)
-        b_logprobs = logprobs[:args.num_steps].reshape(-1)
-        b_advantages = advantages[:args.num_steps].reshape(-1)
-        b_values = values[:args.num_steps].reshape(-1)
+        b_actions = actions[: args.num_steps].reshape((-1,) + action_shape)
+        b_logprobs = logprobs[: args.num_steps].reshape(-1)
+        b_advantages = advantages[: args.num_steps].reshape(-1)
+        b_values = values[: args.num_steps].reshape(-1)
         b_returns = b_advantages + b_values
         if args.fix_target:
-            b_learns = learns[:args.num_steps].reshape(-1)
+            b_learns = learns[: args.num_steps].reshape(-1)
         else:
             b_learns = torch.ones_like(b_values, dtype=torch.bool)
 
@@ -445,12 +493,22 @@ def main():
             for start in range(0, args.local_batch_size, args.local_minibatch_size):
                 end = start + args.local_minibatch_size
                 mb_inds = b_inds[start:end]
-                mb_obs = {
-                    k: v[mb_inds] for k, v in b_obs.items()
-                }
-                old_approx_kl, approx_kl, clipfrac, pg_loss, v_loss, entropy_loss = \
-                    train_step(agent, optimizer, scaler, mb_obs, b_actions[mb_inds], b_logprobs[mb_inds], b_advantages[mb_inds],
-                            b_returns[mb_inds], b_values[mb_inds], b_learns[mb_inds], args)
+                mb_obs = {k: v[mb_inds] for k, v in b_obs.items()}
+                old_approx_kl, approx_kl, clipfrac, pg_loss, v_loss, entropy_loss = (
+                    train_step(
+                        agent,
+                        optimizer,
+                        scaler,
+                        mb_obs,
+                        b_actions[mb_inds],
+                        b_logprobs[mb_inds],
+                        b_advantages[mb_inds],
+                        b_returns[mb_inds],
+                        b_values[mb_inds],
+                        b_learns[mb_inds],
+                        args,
+                    )
+                )
                 reduce_gradidents(optim_params, args.world_size)
                 nn.utils.clip_grad_norm_(optim_params, args.max_grad_norm)
                 scaler.step(optimizer)
@@ -460,14 +518,16 @@ def main():
         if step > 0:
             # TODO: use cyclic buffer to avoid copying
             for v in obs.values():
-                v[:step] = v[args.num_steps:].clone()
+                v[:step] = v[args.num_steps :].clone()
             for v in [actions, logprobs, rewards, dones, values, learns]:
-                v[:step] = v[args.num_steps:].clone()
+                v[:step] = v[args.num_steps :].clone()
 
         train_time = time.time() - _start
 
         if local_rank == 0:
-            fprint(f"train_time={train_time:.4f}, collect_time={collect_time:.4f}, bootstrap_time={bootstrap_time:.4f}")
+            fprint(
+                f"train_time={train_time:.4f}, collect_time={collect_time:.4f}, bootstrap_time={bootstrap_time:.4f}"
+            )
 
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
@@ -477,7 +537,9 @@ def main():
             if iteration % args.save_interval == 0:
                 torch.save(agent.state_dict(), os.path.join(ckpt_dir, f"agent.pt"))
 
-            writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+            writer.add_scalar(
+                "charts/learning_rate", optimizer.param_groups[0]["lr"], global_step
+            )
             writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
             writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
             writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
@@ -501,8 +563,14 @@ def main():
 
         if args.fix_target:
             if rank == 0:
-                should_update = len(avg_win_rates) == 1000 and np.mean(avg_win_rates) > args.update_win_rate and np.mean(avg_ep_returns) > args.update_return
-                should_update = torch.tensor(int(should_update), dtype=torch.int64, device=device)
+                should_update = (
+                    len(avg_win_rates) == 1000
+                    and np.mean(avg_win_rates) > args.update_win_rate
+                    and np.mean(avg_ep_returns) > args.update_return
+                )
+                should_update = torch.tensor(
+                    int(should_update), dtype=torch.int64, device=device
+                )
             else:
                 should_update = torch.zeros((), dtype=torch.int64, device=device)
             if args.world_size > 1:
@@ -511,13 +579,23 @@ def main():
             if should_update:
                 agent_t.load_state_dict(agent.state_dict())
                 with torch.no_grad():
-                    traced_model_t = torch.jit.trace(agent_t, (example_obs,), check_tolerance=False, check_trace=False)
+                    traced_model_t = torch.jit.trace(
+                        agent_t,
+                        (example_obs,),
+                        check_tolerance=False,
+                        check_trace=False,
+                    )
                     traced_model_t = torch.jit.optimize_for_inference(traced_model_t)
 
                 version += 1
                 if rank == 0:
-                    torch.save(agent.state_dict(), os.path.join(ckpt_dir, f"agent_v{version}.pt"))
-                    print(f"Updating agent at global_step={global_step} with win_rate={np.mean(avg_win_rates)}")
+                    torch.save(
+                        agent.state_dict(),
+                        os.path.join(ckpt_dir, f"agent_v{version}.pt"),
+                    )
+                    print(
+                        f"Updating agent at global_step={global_step} with win_rate={np.mean(avg_win_rates)}"
+                    )
                     avg_win_rates.clear()
                     avg_ep_returns.clear()
 
@@ -525,7 +603,8 @@ def main():
             # Eval with rule-based policy
             _start = time.time()
             eval_return = evaluate(
-                eval_envs, traced_model, local_eval_episodes, device, args.fp16_eval)[0]
+                eval_envs, traced_model, local_eval_episodes, device, args.fp16_eval
+            )[0]
             eval_stats = torch.tensor(eval_return, dtype=torch.float32, device=device)
 
             # sync the statistics

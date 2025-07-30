@@ -59,7 +59,7 @@ class Args:
     """whether to record the game as YGOPro replays"""
 
     num_episodes: int = 1024
-    """the number of episodes to run""" 
+    """the number of episodes to run"""
     num_envs: int = 64
     """the number of parallel game environments"""
 
@@ -72,7 +72,7 @@ class Args:
     """the checkpoint to load for the first agent, must be a `flax_model` file"""
     checkpoint2: str = "checkpoints/agent.pt"
     """the checkpoint to load for the second agent, must be a `flax_model` file"""
-    
+
     xla_device: Optional[str] = None
     """the XLA device to use, `cpu` for forcing running on CPU"""
 
@@ -96,6 +96,7 @@ def create_agent2(args):
 
 if __name__ == "__main__":
     from jax.experimental.compilation_cache import compilation_cache as cc
+
     cc.set_cache_dir(os.path.expanduser("~/.cache/jax"))
 
     args = tyro.cli(Args)
@@ -137,7 +138,7 @@ if __name__ == "__main__":
         seed=seed,
         player=-1,
         max_options=args.max_options,
-        play_mode='self',
+        play_mode="self",
         async_reset=False,
         verbose=args.verbose,
         record=args.record,
@@ -173,10 +174,10 @@ if __name__ == "__main__":
         params2 = jax.jit(agent2.init)(key, sample_obs, rstate2)
         with open(args.checkpoint2, "rb") as f:
             params2 = flax.serialization.from_bytes(params2, f.read())
-    
+
     params1 = jax.device_put(params1)
     params2 = jax.device_put(params2)
-    
+
     @partial(jax.jit, static_argnums=(4,))
     def get_probs(params, rstate, obs, done=None, model_id=1):
         if model_id == 1:
@@ -190,23 +191,31 @@ if __name__ == "__main__":
         return next_rstate, probs
 
     if num_envs != 1:
+
         @jax.jit
         def get_probs2(params1, params2, rstate1, rstate2, obs1, obs2, main, done):
             next_rstate1, probs1 = get_probs(params1, rstate1, obs1, None, 1)
             next_rstate2, probs2 = get_probs(params2, rstate2, obs2, None, 2)
             probs = jnp.where(main[:, None], probs1, probs2)
             rstate1 = jax.tree.map(
-                lambda x1, x2: jnp.where(main[:, None], x1, x2), next_rstate1, rstate1)
+                lambda x1, x2: jnp.where(main[:, None], x1, x2), next_rstate1, rstate1
+            )
             rstate2 = jax.tree.map(
-                lambda x1, x2: jnp.where(main[:, None], x2, x1), next_rstate2, rstate2)
+                lambda x1, x2: jnp.where(main[:, None], x2, x1), next_rstate2, rstate2
+            )
             rstate1, rstate2 = jax.tree.map(
-                lambda x: jnp.where(done[:, None], 0, x), (rstate1, rstate2))
+                lambda x: jnp.where(done[:, None], 0, x), (rstate1, rstate2)
+            )
             return rstate1, rstate2, probs
 
         def predict_fn(rstate1, rstate2, obs, main, done):
-            rstate1, rstate2, probs = get_probs2(params1, params2, rstate1, rstate2, obs, obs, main, done)
+            rstate1, rstate2, probs = get_probs2(
+                params1, params2, rstate1, rstate2, obs, obs, main, done
+            )
             return rstate1, rstate2, np.array(probs)
+
     else:
+
         def predict_fn(rstate1, rstate2, obs, main, done):
             if main[0]:
                 rstate1, probs = get_probs(params1, rstate1, obs, done, 1)
@@ -215,7 +224,7 @@ if __name__ == "__main__":
             return rstate1, rstate2, np.array(probs)
 
     obs, infos = envs.reset()
-    next_to_play = infos['to_play']
+    next_to_play = infos["to_play"]
 
     dones = np.zeros(num_envs, dtype=np.bool_)
 
@@ -261,7 +270,7 @@ if __name__ == "__main__":
 
         _start = time.time()
         obs, rewards, dones, infos = envs.step(actions)
-        next_to_play = infos['to_play']
+        next_to_play = infos["to_play"]
 
         env_time += time.time() - _start
 
@@ -272,14 +281,19 @@ if __name__ == "__main__":
                 continue
             # c1 = collected[idx]
             collected[idx] = True
-            win_reason = infos['win_reason'][idx]
+            win_reason = infos["win_reason"][idx]
             pl = 1 if main[idx] else -1
-            episode_length = infos['l'][idx]
-            episode_reward = infos['r'][idx]
+            episode_length = infos["l"][idx]
+            episode_reward = infos["r"][idx]
             main_reward = episode_reward * pl
             win = int(main_reward > 0)
 
-            win_player = 0 if (to_play[idx] == 0 and episode_reward > 0) or (to_play[idx] == 1 and episode_reward < 0) else 1
+            win_player = (
+                0
+                if (to_play[idx] == 0 and episode_reward > 0)
+                or (to_play[idx] == 1 and episode_reward < 0)
+                else 1
+            )
             win_players.append(win_player)
             win_agent = 1 if main_reward > 0 else 2
             win_agents.append(win_agent)
@@ -290,9 +304,15 @@ if __name__ == "__main__":
             win_rates.append(win)
             win_reasons.append(1 if win_reason == 1 else 0)
             if args.verbose:
-                sys.stderr.write(f"Episode {len(episode_lengths)}: length={episode_length}, reward={main_reward}, win={win}, win_reason={win_reason}\n")
+                sys.stderr.write(
+                    f"Episode {len(episode_lengths)}: length={episode_length}, reward={main_reward}, win={win}, win_reason={win_reason}\n"
+                )
             else:
-                pbar.set_postfix(len=np.mean(episode_lengths), reward=np.mean(episode_rewards), win_rate=np.mean(win_rates))
+                pbar.set_postfix(
+                    len=np.mean(episode_lengths),
+                    reward=np.mean(episode_rewards),
+                    win_rate=np.mean(win_rates),
+                )
                 pbar.update(1)
 
             # Only when num_envs=1, we switch the player here
@@ -306,7 +326,9 @@ if __name__ == "__main__":
 
     if not args.verbose:
         pbar.close()
-    print(f"len={np.mean(episode_lengths)}, reward={np.mean(episode_rewards)}, win_rate={np.mean(win_rates)}, win_reason={np.mean(win_reasons)}")
+    print(
+        f"len={np.mean(episode_lengths)}, reward={np.mean(episode_rewards)}, win_rate={np.mean(win_rates)}, win_reason={np.mean(win_reasons)}"
+    )
 
     episode_lengths = np.array(episode_lengths)
     win_players = np.array(win_players)

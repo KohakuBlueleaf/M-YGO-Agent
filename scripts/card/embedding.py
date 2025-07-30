@@ -37,7 +37,8 @@ def get_embeddings(texts, batch_size=64, wait_time=0.1, verbose=False):
         if verbose:
             print(f"Embedding {i} / {len(texts)}")
         embeddings += vo.embed(
-            texts[i : i + batch_size], model="voyage-2", truncation=False).embeddings
+            texts[i : i + batch_size], model="voyage-2", truncation=False
+        ).embeddings
         time.sleep(wait_time)
     embeddings = np.array(embeddings, dtype=np.float32)
     return embeddings
@@ -85,7 +86,7 @@ if __name__ == "__main__":
     for code in read_decks(deck_dir):
         if code not in all_codes:
             new_codes.append(code)
-    
+
     if new_codes == []:
         print("No new cards have been added to the code list.")
     else:
@@ -103,14 +104,18 @@ if __name__ == "__main__":
         else:
             all_embeddings = pickle.load(open(embeddings_file, "rb"))
 
-        codes_not_in_embeddings = [code for code in code_list if code not in all_embeddings]
+        codes_not_in_embeddings = [
+            code for code in code_list if code not in all_embeddings
+        ]
         if codes_not_in_embeddings == []:
             print("All cards have embeddings.")
             exit()
         print(f"{len(codes_not_in_embeddings)} cards do not have embeddings.")
         new_texts = read_texts(cards_db, codes_not_in_embeddings)
         print(new_texts)
-        embeddings = get_embeddings(new_texts, args.batch_size, args.wait_time, verbose=True)
+        embeddings = get_embeddings(
+            new_texts, args.batch_size, args.wait_time, verbose=True
+        )
         embeddings = np.array(embeddings, dtype=np.float32)
         for code, embedding in zip(codes_not_in_embeddings, embeddings):
             all_embeddings[code] = embedding
