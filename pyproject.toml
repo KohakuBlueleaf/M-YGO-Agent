@@ -1,0 +1,38 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "m-ygo-agent"
+version = "0.0.1"
+description = "A Yu-Gi-Oh! AI Environment."
+readme = "README.md" # Assumes you have a README.md in your project root
+requires-python = ">=3.10.0"
+license = { text = "MIT" }
+authors = [
+  { name = "KohakuBlueLeaf", email = "kohaku@kblueleaf.net" },
+]
+urls = { "Homepage" = "https://github.com/KohakuBlueleaf/M-YGO-Agent" }
+
+dependencies = [
+  "tyro",
+  "pandas",
+  "tensorboardX",
+  "tqdm",
+  "numpy",
+  "dm-env",
+  "gymnasium",
+  "optree",
+  "packaging",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ygoenv = ["*/*.so"]
