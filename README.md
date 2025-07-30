@@ -19,6 +19,22 @@ We introduce following updates and features:
 ## Installation
 Clone this repository and follow the "build from source" instructions in the original YGO-agent repository.
 
+For testing, you can use the following command:
+```bash
+cd scripts
+python ./test.py  --deck ../assets/deck/ --num_envs 1 --num_episodes 1 --verbose
+```
+
+### Update card scripts from MDPro3
+In MDPro3 installation (`xxx/MDPro3`), you can find a zip file `Data/script.zip` and there is a folder `script` inside it. You can copy the content of script folder (lot of lua file) to `script/script` folder, than run the `scripts/card/code_list.py` script under `scripts` folder to generate the `code_list.txt` file, after doing this you should be able to utilize deck with latest card scripts.
+
+to test if your operation is successful, you can run the following command:
+```bash
+cd scripts
+python ./test.py  --deck ../assets/deck/ --num_envs 1 --num_episodes 1 --verbose  --deck1 DragonMaidTail --deck2 TenpaiDragonMaid
+```
+Where `DragonMaidTail` and `TenpaiDragonMaid` are the decks who utilize DragonTail series cards and TenpaiDragon series cards, which are the latest cards in MDPro3. And not fully supported in Mycard's card script list. But MDPro3 has the latest card scripts, so you can use it to test the latest cards.
+
 ## TODOs
 - [ ] A more comprehensive document on "how to use the ygoenv"
 - [ ] Examples of ygoenv usage for making RL agent
