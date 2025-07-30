@@ -10,7 +10,7 @@ from ygoai.embed import read_cards
 class Args:
     output: str = "code_list.txt"
     """the file containing the list of card codes"""
-    cdb: str = "../assets/locale/en/cards.cdb"
+    cdb: str = "../assets/locale/zh/cards.cdb"
     """the cards database file"""
     script_dir: str = "script"
     """path to the scripts directory"""
@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     difference = codes_s.difference(codes_c)
     if len(difference) > 0:
-        raise ValueError("Missing in cards.cdb: {difference}")
+        raise ValueError(f"Missing in cards.cdb: {difference}")
 
     print(f"Total {len(codes_c)} cards, {len(codes_s)} scripts")
 
