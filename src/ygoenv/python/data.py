@@ -17,7 +17,7 @@ from collections import namedtuple
 from typing import Any, Dict, List, Tuple, Type
 
 import dm_env
-import gym
+import gymnasium as gym
 import gymnasium
 import numpy as np
 import optree

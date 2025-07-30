@@ -19,7 +19,7 @@ from collections import namedtuple
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union
 
 import dm_env
-import gym
+import gymnasium as gym
 import gymnasium
 
 from .data import (

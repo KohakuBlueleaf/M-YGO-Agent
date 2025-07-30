@@ -1369,15 +1369,15 @@ public:
             Spec<uint8_t>({conf["max_options"_], n_action_feats})),
         "obs:h_actions_"_.Bind(
             Spec<uint8_t>({conf["n_history_actions"_], n_action_feats})),
-        "info:num_options"_.Bind(Spec<int>({}, {0, conf["max_options"_] - 1})),
-        "info:to_play"_.Bind(Spec<int>({}, {0, 1})),
-        "info:is_selfplay"_.Bind(Spec<int>({}, {0, 1})),
-        "info:win_reason"_.Bind(Spec<int>({}, {-1, 1})));
+        "info:num_options"_.Bind(Spec<int>({}, std::tuple<int, int>{0, conf["max_options"_] - 1})),
+        "info:to_play"_.Bind(Spec<int>({}, std::tuple<int, int>{0, 1})),
+        "info:is_selfplay"_.Bind(Spec<int>({}, std::tuple<int, int>{0, 1})),
+        "info:win_reason"_.Bind(Spec<int>({}, std::tuple<int, int>{-1, 1})));
   }
   template <typename Config>
   static decltype(auto) ActionSpec(const Config &conf) {
     return MakeDict(
-        "action"_.Bind(Spec<int>({}, {0, conf["max_options"_] - 1})));
+        "action"_.Bind(Spec<int>({}, std::tuple<int, int>{0, conf["max_options"_] - 1})));
   }
 };
 

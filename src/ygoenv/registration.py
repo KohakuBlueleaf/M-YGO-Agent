@@ -17,7 +17,7 @@ import importlib
 import os
 from typing import Any, Dict, List, Tuple
 
-import gym
+import gymnasium as gym
 from packaging import version
 
 base_path = os.path.abspath(os.path.dirname(__file__))

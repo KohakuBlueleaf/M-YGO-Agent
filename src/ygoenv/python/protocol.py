@@ -26,7 +26,7 @@ from typing import (
 )
 
 import dm_env
-import gym
+import gymnasium as gym
 import numpy as np
 from dm_env import TimeStep
 

@@ -16,7 +16,7 @@
 from abc import ABC, ABCMeta
 from typing import Any, Dict, List, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import optree
 from packaging import version
