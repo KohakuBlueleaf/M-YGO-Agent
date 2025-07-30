@@ -23,7 +23,9 @@ Clone this repository and follow the "build from source" instructions in the ori
 - [ ] A more comprehensive document on "how to use the ygoenv"
 - [ ] Examples of ygoenv usage for making RL agent
 - [ ] RL Agent implementation in pytorch
+- [ ] Fix the record functionality
 
 ## Known Issues
 * EDOPro backend is not working properly, it is recommended to use YGOPro-v1 backend
   * Some updates upstream break current implementation in ygoenv/edopro, we need to find the exact working commit to make it work again.
+* Record feature not working correctly, the generated yrp file cannot be parsed by MDPro3.
