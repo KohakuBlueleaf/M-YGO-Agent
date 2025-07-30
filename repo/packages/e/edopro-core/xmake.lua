@@ -3,6 +3,9 @@ package("edopro-core")
     set_homepage("https://github.com/edo9300/ygopro-core")
 
     set_urls("https://github.com/edo9300/ygopro-core.git")
+    -- note, 0.0.3 require other code change in edopro.h
+    add_versions("0.0.2", "900966b7c70ac0967b13d7d5c4b22b8187936971")
+    add_versions("0.0.3", "9174f58a5c5b1b94ebd3d94881fec3aaf630b5ca")
 
     -- set_sourcedir(path.join(os.scriptdir(), "edopro-core"))
     -- set_policy("package.install_always", true)
@@ -30,11 +33,21 @@ package("edopro-core")
             end
         end
 
-        check_and_insert("interpreter.h", 12, "extern \"C\" {")
-        check_and_insert("interpreter.h", 14, "}")
+        local installed_version = package:version()
+        if installed_version ~= "0.0.2" then
+            check_and_insert("interpreter.h", 12, "extern \"C\" {")
+            check_and_insert("interpreter.h", 14, "}")
 
-        check_and_insert("interpreter.h", 16, "extern \"C\" {")
-        check_and_insert("interpreter.h", 19, "}")
+            check_and_insert("interpreter.h", 16, "extern \"C\" {")
+            check_and_insert("interpreter.h", 19, "}")
+        end
+        if installed_version ~= "0.0.3" then
+            check_and_insert("effect.h", 10, "extern \"C\" {")
+            check_and_insert("effect.h", 12, "}")
+
+            check_and_insert("scriptlib.h", 13, "extern \"C\" {")
+            check_and_insert("scriptlib.h", 16, "}")
+        end
 
         local configs = {}
         if package:config("shared") then
